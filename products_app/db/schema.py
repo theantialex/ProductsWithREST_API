@@ -20,8 +20,8 @@ metadata = MetaData(naming_convention=convention)
 
 @unique
 class ItemType(Enum):
-    offer = 'offer'
-    category = 'category'
+    offer = 'OFFER'
+    category = 'CATEGORY'
 
 
 items_table = Table(
@@ -32,7 +32,7 @@ items_table = Table(
     Column('date', Date, nullable=False),
     Column('type', PgEnum(ItemType, name='item_type'), nullable=False),
     Column('price_sum', Integer, nullable=True),
-    Column('price_amount', Integer, nullable=True),
+    Column('price_amount', Integer, nullable=False),
     Column('parent_id', String, ForeignKey('items.item_id', ondelete='CASCADE'), index=True, nullable=True)
 )
 
