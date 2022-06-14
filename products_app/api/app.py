@@ -9,7 +9,7 @@ from aiohttp_apispec import setup_aiohttp_apispec, validation_middleware
 from configargparse import Namespace
 
 from products_app.api.handlers import HANDLERS
-# from products_app.api.middleware import error_middleware, handle_validation_error
+from products_app.api.middleware import error_middleware, handle_validation_error
 from products_app.api.payloads import AsyncGenJSONListPayload, JsonPayload
 from products_app.utils.pg import setup_pg
 
@@ -26,7 +26,7 @@ def create_app(args: Namespace) -> Application:
     """
     app = Application(
         client_max_size=MAX_REQUEST_SIZE,
-        middlewares=[#error_middleware, 
+        middlewares=[error_middleware, 
         validation_middleware]
     )
 
@@ -35,12 +35,12 @@ def create_app(args: Namespace) -> Application:
 
     # Регистрация обработчиков
     for handler in HANDLERS:
-        log.debug('Registering handler %r as %r', handler, handler.URL_PATH)
-        app.router.add_route('*', handler.URL_PATH, handler)
+        log.info('Registering handler %r as %r', handler, handler.URL)
+        app.router.add_route('*', handler.URL, handler)
 
     # Swagger документация
     setup_aiohttp_apispec(app=app, title='Products API', swagger_path='/'
-                            #, error_callback=handle_validation_error
+                            , error_callback=handle_validation_error
                         )
 
     # Автоматическая сериализация в json данных в HTTP ответах

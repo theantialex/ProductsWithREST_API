@@ -40,6 +40,11 @@ class ImportsView(BaseView):
     @request_schema(ImportSchema())
     async def post(self):
         async with self.pg.transaction() as conn:
+            query = items_table.insert().values(
+                {'item_id' : self.id, 'name' : 'Name', 'price_amount' : 0,'type': 'CATEGORY',
+                'date': datetime.now()}).returning(items_table.c.item_id)
+            item_id = await conn.fetchval(query)
+            log.info(str(item_id))
 
 
         return Response(status=HTTPStatus.OK)

@@ -2,7 +2,7 @@ from aiohttp.web_urldispatcher import View
 from asyncpgsa import PG
 
 class BaseView(View):
-    URL_PATH: str
+    URL: str
 
     @property
     def pg(self) -> PG:
