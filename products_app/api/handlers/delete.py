@@ -15,7 +15,7 @@ class DeleteView(BaseView):
     def id(self):
         return str(self.request.match_info.get('id'))
 
-    docs(summary='Удаление продукта/категории')
+    docs(summary='Удалить продукта/категории')
     async def delete(self):
         query = select([
             exists().where(items_table.c.item_id == self.id)

@@ -12,6 +12,7 @@ from configargparse import Namespace
 
 CENSORED = '***'
 DEFAULT_PG_URL = 'postgresql://db_user:12345@localhost/products'
+MAX_QUERY_ARGS = 32767
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
 

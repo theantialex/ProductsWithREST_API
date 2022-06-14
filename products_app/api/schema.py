@@ -8,16 +8,20 @@ from products_app.db.schema import ItemType
 
 DATE_FORMAT = "%Y%m%dT%H%M%S.%fZ"
 
-class ItemSchema(Schema):
+class ItemImportSchema(Schema):
     id = Str(validate=Length(min=1, max=256), required=True)
     name = Str(validate=Length(min=1, max=256), required=True)
     parentId = Str(validate=Length(min=1, max=256), required=False)
     price = Int(validate=Range(min=0), strict=True, required=False)
     type = Str(validate=OneOf([type.value for type in ItemType]), required=True)
 
+class ItemSchema(ItemImportSchema):
+    date = Date(format=DATE_FORMAT, required=True)
+    children = Nested(lambda: ItemSchema(), many=True, required=False)
+
 
 class ImportSchema(Schema):
-    items = Nested(ItemSchema, many=True, required=True)
+    items = Nested(ItemImportSchema, many=True, required=True)
     updateDate = Date(format=DATE_FORMAT, required=True)
 
     @validates('updateDate')
