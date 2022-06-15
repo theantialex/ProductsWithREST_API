@@ -1,3 +1,4 @@
+from marshmallow import ValidationError
 from .base import BaseView
 from products_app.utils.pg import MAX_QUERY_ARGS
 from products_app.db.schema import items_table, stats_table
@@ -9,7 +10,9 @@ from typing import Generator
 from aiohttp.web_response import Response
 from aiohttp_apispec import docs, request_schema
 from aiomisc import chunk_list
-from sqlalchemy import exists, select, bindparam
+from sqlalchemy import select, bindparam
+from sqlalchemy.sql import text
+
 
 
 class ImportsView(BaseView):
@@ -40,15 +43,62 @@ class ImportsView(BaseView):
     async def divide_insert_update_items(cls, items):
         insert_items = []
         update_items = []
+        update_parents = {}
         for item in items:
-            query = select([
-                exists().where(items_table.c.item_id == item.id)
-            ])
-            if not await cls.pg.fetchval(query):
+            query = items_table.select('parent_id', 'type').where(items_table.c.item_id == item['id'])
+            db_item = await cls.pg.fetchrow(query)
+
+            if db_item['type'] != item['type']:
+                raise ValidationError
+
+            if not db_item:
                 insert_items.append(item)
             else:
                 update_items.append(item)
-        return insert_items, update_items
+
+                if db_item['parent_id']:
+                    update_parents[db_item['parent_id']][0] = update_parents.get(db_item['parent_id'])[0] - item['price']
+                    update_parents[db_item['parent_id']][1] = update_parents.get(db_item['parent_id'])[1] - 1
+                if item['parentId']:
+                    parent_query = items_table.select('type').where(items_table.c.item_id == item['parentId'])
+                    parent = await cls.pg.fetchrow(parent_query)
+                    if parent['type'] != 'CATEGORY':
+                        raise ValidationError
+                    
+                    update_parents[item['parentId']][0] = update_parents.get(item['parentId'])[0] + item['price']
+                    update_parents[db_item['parentId']][1] = update_parents.get(item['parentId'])[1] + 1
+
+        return insert_items, update_items, update_parents
+    
+    @classmethod
+    async def process_ancestors(cls, parents, date):
+        ancestors = []
+        updated_ancestors = []
+        for key, item in parents:
+            query = text(
+                """    
+                WITH RECURSIVE parents AS (
+                    SELECT item_id, name, date, type, price_sum, price_amount, parent_id
+                    FROM items
+                    WHERE item_id = {}
+                    UNION
+                    SELECT op.item_id, op.name, op.date, op.type, op.price_sum, op.price_amount, op.parent_id
+                    FROM items op
+                    JOIN parents p ON op.item_id = p.parent_id
+                )
+                SELECT parents.item_id, parents.name, parents.date, parents.type,
+                    parents.price_sum, parents.price_amount, parents.parent_id
+                from PARENTS;""".format(key)
+            )
+            rows = await cls.pg.fetch(query)
+            ancestors.append(**rows)
+            for row in rows:
+                row['price_sum'] += item[0]
+                row['price_amount'] += item[1]
+                row['date'] = date
+                updated_ancestors.append(row)
+
+        return ancestors, updated_ancestors
 
 
     @docs(summary='Добавить выгрузку с информацией о товарах/категориях')
@@ -58,40 +108,48 @@ class ImportsView(BaseView):
             items = self.request['data']['items']
             date = self.request['data']['date']
 
-            orphan_items = filter(lambda x: x['parentId'] == None, items)
-            categorized_items = filter(lambda x: x['parentId'], items)
+            insert_items, update_items, parents = self.divide_insert_update_items(items)
 
-            orphan_insert_items, orphan_update_items = self.divide_insert_update_items(orphan_items)
-            categorized_insert_items, categorized_update_items = self.divide_insert_update_items(categorized_items)
-
-            insert_rows = self.make_items_rows(orphan_insert_items, date)
-            update_rows = self.make_items_rows(orphan_update_items, date)
+            # Вставка новых категорий/продуктов
+            insert_rows = self.make_items_rows(insert_items, date)
             chunked_insert_rows = chunk_list(insert_rows, self.MAX_ITEMS_PER_INSERT)
-            chunked_update_rows = chunk_list(update_rows, self.MAX_ITEMS_PER_INSERT)
 
-            # Вставка новых категорий/продуктов без родителей
             query = items_table.insert()
             for chunk in chunked_insert_rows:
                 await conn.execute(query.values(list(chunk)))
-            
-            update_items_ids = [item['item_id'] for item in orphan_update_items]
-            chunked_statistics_rows = chunk_list(update_items_ids, self.MAX_ITEMS_PER_INSERT)
 
-            # Вставка новых категорий/продуктов без родителей
+            # Добавление категорий/продуктов статистику
+            update_items_ids = [item['id'] for item in update_items]
+            query = items_table.select().where(items_table.c.item_id._in.update_items_ids)
+            statistics_items = await conn.execute(query)
+            chunked_statistics_rows = chunk_list(statistics_items, self.MAX_ITEMS_PER_INSERT)
+
+            query = stats_table.insert()
             for chunk in chunked_statistics_rows:
-                query = select(items_table).where(items_table.c.id._in(update_items_ids))
-                rows = await conn.fetch(query.values(list(chunk)))
-                stats_query = stats_table.insert().values(rows)
-                await conn.execute(stats_query)
+                await conn.execute(query.values(list(chunk)))
 
-            # Обновление категорий/продуктов без родителей
+            # Обновление категорий/продуктов
+            update_rows = self.make_items_rows(update_items, date)
+            chunked_update_rows = chunk_list(update_rows, self.MAX_ITEMS_PER_INSERT)
+
             query = items_table.update().where(items_table.c.item_id == bindparam('item_id'))
             for chunk in chunked_update_rows:
                 await conn.execute(query.values(list(chunk)))
 
+            # Нахождение предков категорий/продуктов
+            ancestors, updated_ancestors = self.process_ancestors(parents, date)
 
+            # Добавление предков категорий/продуктов в статистику
+            chunked_statistics_rows = chunk_list(ancestors, self.MAX_ITEMS_PER_INSERT)
+            query = stats_table.insert()
+            for chunk in chunked_statistics_rows:
+                await conn.execute(query.values(list(chunk)))
 
-
+            # Обновление предков категорий/продуктов
+            chunked_ancestor_rows = chunk_list(updated_ancestors, self.MAX_ITEMS_PER_INSERT)
+            query = items_table.update().where(items_table.c.item_id == bindparam('item_id'))
+            for chunk in chunked_ancestor_rows:
+                await conn.execute(query.values(list(chunk)))
 
         return Response(status=HTTPStatus.OK)
 
