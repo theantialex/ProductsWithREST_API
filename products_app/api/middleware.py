@@ -15,8 +15,7 @@ from products_app.api.payloads import JsonPayload
 log = logging.getLogger(__name__)
 
 
-def format_http_error(http_error_cls, message: Optional[str] = None,
-                      fields: Optional[Mapping] = None) -> HTTPException:
+def format_http_error(http_error_cls, message: Optional[str] = None) -> HTTPException:
     """
     Форматирует ошибку в виде HTTP исключения
     """
@@ -26,9 +25,6 @@ def format_http_error(http_error_cls, message: Optional[str] = None,
         'message': message or status.description
     }
 
-    if fields:
-        error['fields'] = fields
-
     return http_error_cls(body={'error': error})
 
 
@@ -36,8 +32,7 @@ def handle_validation_error(error: ValidationError, *_):
     """
     Представляет ошибку валидации данных в виде HTTP ответа.
     """
-    raise format_http_error(HTTPBadRequest, 'Validation Failed',
-                            error.messages)
+    raise format_http_error(HTTPBadRequest, error.messages)
 
 
 @middleware

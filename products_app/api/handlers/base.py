@@ -1,9 +1,13 @@
 from aiohttp.web_urldispatcher import View
-from asyncpgsa import PG
+from asyncpg import Pool
 
 class BaseView(View):
     URL: str
 
     @property
-    def pg(self) -> PG:
+    def pg(self) -> Pool:
         return self.request.app['pg']
+
+    @classmethod
+    def get_sql(self, query):
+        return str(query.compile(compile_kwargs={"literal_binds": True}))

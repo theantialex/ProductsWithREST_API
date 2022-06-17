@@ -1,8 +1,8 @@
 from enum import Enum, unique
 
 from sqlalchemy import (
-    Column, Date, Enum as PgEnum, ForeignKey, Integer,
-    MetaData, String, Table,
+    Column, DateTime, Enum as PgEnum, Integer,
+    MetaData, String, Table
 )
 
 convention = {
@@ -27,25 +27,13 @@ class ItemType(Enum):
 items_table = Table(
     'items',
     metadata,
-    Column('item_id', String, primary_key=True),
+    Column('id', Integer, primary_key=True),
+    Column('item_id', String, index=True, nullable=False),
     Column('name', String, nullable=False),
-    Column('date', Date, nullable=False),
+    Column('date', DateTime, nullable=False),
     Column('type', PgEnum(ItemType, name='item_type'), nullable=False),
     Column('price_sum', Integer, nullable=True),
     Column('price_amount', Integer, nullable=False),
-    Column('parent_id', String, ForeignKey('items.item_id', ondelete='CASCADE'), index=True, nullable=True)
-)
-
-stats_table = Table(
-    'statistics',
-    metadata,
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('item_id', String, ForeignKey('items.item_id', ondelete='CASCADE'), index=True),
-    Column('name', String, nullable=False),
-    Column('date', Date, nullable=False),
-    Column('type', PgEnum(ItemType, name='item_type'), nullable=False),
-    Column('price_sum', Integer, nullable=True),
-    Column('price_amount', Integer, nullable=True),
     Column('parent_id', String, index=True, nullable=True)
 )
 

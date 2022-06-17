@@ -1,10 +1,10 @@
 SQLAlchemy==1.4.*
 alembic==1.8.*
 aiohttp==3.8.*
-asyncpgsa==0.25.*
 configargparse==1.5.*
 psycopg2-binary==2.9.*
 aiomisc==16.0.*
 setproctitle==1.2.*
 aiohttp_apispec==2.2.*
 marshmallow==3.16.*
+asyncpg==0.25.*
