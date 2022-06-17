@@ -79,7 +79,8 @@ class ImportsView(BaseView):
                     if parent_id and parent_id in update_parents:
                         update_parents[parent_id] = [update_parents[parent_id][0] + update_parents[item['parentId']][0], 
                             update_parents[parent_id][1] + update_parents[item['parentId']][1]]
-
+                    elif parent_id and parent_id in imported_items:
+                        update_parents[parent_id] = [update_parents[item['parentId']][0], update_parents[item['parentId']][1]]
             imported_items[item['id']] = item
         return update_parents
 
@@ -128,7 +129,10 @@ class ImportsView(BaseView):
             ins['price_amount'] += updates[ins['item_id']][1]
 
         for key in update_ancestors.keys():
-            update_ancestors[key][0] += updates[key][0]
+            if update_ancestors[key][0]:
+                update_ancestors[key][0] += updates[key][0]
+            else:
+                update_ancestors[key][0] = updates[key][0]
             update_ancestors[key][1] += updates[key][1]
 
         for key, val in parents.items():
