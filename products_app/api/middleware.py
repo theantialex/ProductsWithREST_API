@@ -32,7 +32,7 @@ def handle_validation_error(error: ValidationError, *_):
     """
     Представляет ошибку валидации данных в виде HTTP ответа.
     """
-    raise format_http_error(HTTPBadRequest, error.messages)
+    raise format_http_error(HTTPBadRequest, *error.messages)
 
 
 @middleware

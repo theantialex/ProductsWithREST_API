@@ -4,7 +4,7 @@ from aiohttp_apispec import docs
 from .base import BaseView
 from products_app.db.schema import items_table
 from aiohttp.web_exceptions import HTTPNotFound
-from sqlalchemy import exists, select, delete
+from sqlalchemy import delete
 
 
 
