@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from marshmallow import ValidationError
 from sqlalchemy import and_
@@ -6,17 +6,15 @@ from .base import BaseView
 from aiohttp_apispec import docs
 from products_app.db.schema import items_table
 from datetime import datetime
-from typing import Generator
 from aiohttp.web_response import Response
-
+from sqlalchemy.dialects import postgresql
 from http import HTTPStatus
-from datetime import timedelta
 
 class SalesView(BaseView):
     URL = '/sales'
 
     @classmethod
-    def make_items_list(cls, rows) -> Generator:
+    def make_items_list(cls, rows):
         items = []
         for row in rows:
             items.append(
@@ -45,7 +43,7 @@ class SalesView(BaseView):
             str(date - timedelta(hours=24)) <= items_table.c.date, items_table.c.date <= str(date))) \
                 .order_by(items_table.c.item_id, items_table.c.date.desc())
         
-        rows = await self.pg.fetch(self.get_sql(query))
+        rows = await self.pg.fetch(self.get_sql(query, postgresql.dialect()))
         items_list = self.make_items_list(rows)
 
         return Response(status=HTTPStatus.OK, body=items_list)
