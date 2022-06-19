@@ -1,13 +1,11 @@
 import asyncpg
 from marshmallow import ValidationError
-from sqlalchemy import null
 from .base import BaseView
 from products_app.utils.pg import MAX_QUERY_ARGS
 from products_app.db.schema import items_table
 from products_app.api.schema import ImportSchema
 
 from http import HTTPStatus
-from typing import Generator
 
 from aiohttp.web_response import Response
 from aiohttp_apispec import docs, request_schema

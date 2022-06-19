@@ -1,12 +1,10 @@
 from http import HTTPStatus
 from aiohttp.web_response import Response
-from aiohttp_apispec import docs, request_schema
+from aiohttp_apispec import docs, response_schema
 from .base import BaseView
 from products_app.db.schema import items_table
 from aiohttp.web_exceptions import HTTPNotFound
-from sqlalchemy import exists, select, delete
-from products_app.api.schema import ItemSchema
-
+from products_app.api.schema import NodeInfoSchema
 
 
 class NodesView(BaseView):
@@ -58,14 +56,13 @@ class NodesView(BaseView):
 
 
     @docs(summary='Получить информацию о категории/продукте')
+    @response_schema(NodeInfoSchema())
     async def get(self):
-
         query = items_table.select().where(items_table.c.item_id == self.id).order_by(items_table.c.date.desc())
+
         db_item = await self.pg.fetchrow(self.get_sql(query))
         if not db_item:
             raise HTTPNotFound(text="Item not found")
-        
-        print(db_item)
 
         children = await self.get_children(db_item)
         item = self.make_item_responce(db_item, children)

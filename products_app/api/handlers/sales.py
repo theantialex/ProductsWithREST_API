@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 from marshmallow import ValidationError
 from sqlalchemy import and_
 from .base import BaseView
-from aiohttp_apispec import docs
+from aiohttp_apispec import docs, response_schema
 from products_app.db.schema import items_table
 from datetime import datetime
 from aiohttp.web_response import Response
 from sqlalchemy.dialects import postgresql
 from http import HTTPStatus
+from products_app.api.schema import StatisticsSchema
 
 class SalesView(BaseView):
     URL = '/sales'
@@ -30,6 +31,7 @@ class SalesView(BaseView):
         return {'items' : items}
 
     @docs(summary='Получить список обновленных товаров')
+    @response_schema(StatisticsSchema())
     async def get(self):
         try:
             date = self.request.rel_url.query.get('date', '')

@@ -17,6 +17,8 @@ class ItemSchema(ItemImportSchema):
     date = DateTime(required=True)
     children = Nested(lambda: ItemSchema(), many=True, required=False)
 
+class ChildfreeItem(ItemImportSchema):
+    date = DateTime(required=True)
 
 class ImportSchema(Schema):
     items = Nested(ItemImportSchema, many=True, required=True)
@@ -49,3 +51,8 @@ class ImportSchema(Schema):
             )
             item_ids.add(item['id'])
 
+class StatisticsSchema(Schema):
+    items = Nested(ChildfreeItem, many=True, required=True)
+
+class NodeInfoSchema(Schema):
+    items = Nested(ItemSchema, many=True, required=True)

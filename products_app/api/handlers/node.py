@@ -1,5 +1,5 @@
 from .base import BaseView
-from aiohttp_apispec import docs
+from aiohttp_apispec import docs, response_schema
 from datetime import datetime
 from aiohttp.web_response import Response
 from products_app.db.schema import items_table
@@ -8,7 +8,7 @@ from http import HTTPStatus
 from sqlalchemy import and_
 from aiohttp.web_exceptions import HTTPNotFound
 from sqlalchemy import exists, select
-
+from products_app.api.schema import StatisticsSchema
 
 class NodeView(BaseView):
     URL = r'/node/{id:\w+}/statistics'
@@ -38,6 +38,7 @@ class NodeView(BaseView):
         return {'items' : items}
 
     @docs(summary='Получить статистику в периоде по категории/товару')
+    @response_schema(StatisticsSchema())
     async def get(self):
         try:
             date_start = self.request.rel_url.query.get('dateStart', '')
