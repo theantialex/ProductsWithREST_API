@@ -9,9 +9,10 @@ from sqlalchemy import and_
 from aiohttp.web_exceptions import HTTPNotFound
 from sqlalchemy import exists, select
 from products_app.api.schema import StatisticsSchema
+from dateutil import parser
 
 class NodeView(BaseView):
-    URL = r'/node/{id:\w+}/statistics'
+    URL = r'/node/{id}/statistic'
 
     @property
     def id(self):
@@ -29,7 +30,7 @@ class NodeView(BaseView):
                 {
                     'id': row['item_id'],
                     'name': row['name'],
-                    'date': row['date'],
+                    'date': datetime.isoformat(row['date'], timespec='milliseconds') + 'Z',
                     'parentId': row['parent_id'],
                     'price': price,
                     'type': row['type']
@@ -44,9 +45,10 @@ class NodeView(BaseView):
             date_start = self.request.rel_url.query.get('dateStart', '')
             date_end = self.request.rel_url.query.get('dateEnd', '')
 
-            date_start = datetime.fromisoformat(date_start)
-            date_end = datetime.fromisoformat(date_end)
-            if date_start > datetime.now() or date_end > datetime.now() or date_start > date_end:
+            date_start = parser.isoparse(date_start)
+            date_end = parser.isoparse(date_end)
+            if date_start.timestamp() > datetime.now().timestamp() or date_end.timestamp() > datetime.now().timestamp() \
+                 or date_start.timestamp() > date_end.timestamp():
                 raise ValidationError
         except:
             raise ValidationError('Validation Failed')

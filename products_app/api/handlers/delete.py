@@ -9,7 +9,7 @@ from sqlalchemy import delete
 
 
 class DeleteView(BaseView):
-    URL = r'/delete/{id:\w+}'
+    URL = r'/delete/{id}'
 
     @property
     def id(self):

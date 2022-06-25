@@ -21,16 +21,13 @@ class ImportsView(BaseView):
     MAX_ITEMS_PER_INSERT = MAX_QUERY_ARGS // len(items_table.columns)
 
     @classmethod
-    def make_items_rows(cls, items, date):
-        """
-        Генерирует данные готовые для вставки в таблицу items.
-        """
-        rows = []
-        for item in items:
+    def rename_item_fields(cls, items_dict, date):
+        items = {}
+        for key, item in items_dict.items():
             item['price_amount'] = 0
             if item['price']:
                 item['price_amount'] = 1
-            rows.append({
+            items[key] = {
                 'item_id': item['id'],
                 'name': item['name'],
                 'date': date,
@@ -38,59 +35,40 @@ class ImportsView(BaseView):
                 'parent_id': item['parentId'],
                 'price_sum': item['price'],
                 'price_amount': item['price_amount']
-            })
-        return rows
+            }
+        return items
     
-    async def calculate_parent_updates(self, items):
+    async def validate_types(self, items):
         imported_items = {}
-        update_parents = {}
         for item in items:
             query = items_table.select().where(items_table.c.item_id == item['id']).order_by(items_table.c.date.desc())
             db_item = await self.pg.fetchrow(self.get_sql(query))
 
             if db_item and db_item['type'] != item['type']:
                 raise ValidationError('Validation Failed')
-
-            if db_item and db_item['parent_id']:
-                if db_item['parent_id'] in update_parents and db_item['type'] == 'OFFER':
-                    parent = update_parents[db_item['parent_id']]
-                    update_parents[db_item['parent_id']] = [parent[0] - db_item['price_sum'], parent[1] - 1]
-                elif db_item['parent_id'] not in update_parents and db_item['type'] == 'OFFER':
-                        update_parents[db_item['parent_id']] = [-db_item['price_sum'], -1]
+            
+            if db_item:
+                item['ex_parent_id'] = db_item['parent_id']
+                item['ex_price_sum'] = db_item['price_sum']
+                item['ex_price_amount'] = db_item['price_amount']
 
             if item['parentId']:
                 parent_query = items_table.select().where(items_table.c.item_id == item['parentId']).order_by(items_table.c.date.desc())
                 parent = await self.pg.fetchrow(self.get_sql(parent_query))
+                
                 if (not parent or parent['type'] != 'CATEGORY') and \
                     (item['parentId'] not in imported_items or imported_items[item['parentId']]['type'] != 'CATEGORY'):
                     raise ValidationError('Validation Failed')
 
-                if item['parentId'] in update_parents and item['type'] == 'OFFER':
-                    parent = update_parents[item['parentId']]
-                    update_parents[item['parentId']] = [parent[0] + item['price'], parent[1] + 1]
-                elif item['parentId'] not in update_parents and item['type'] == 'OFFER':
-                    update_parents[item['parentId']] = [item['price'], 1]
-                
-                parent_id = item['parentId']
-                while parent_id and parent_id in imported_items:
-                    parent_id = imported_items[parent_id]['parentId']
-                    if parent_id and parent_id in update_parents:
-                        update_parents[parent_id] = [update_parents[parent_id][0] + update_parents[item['parentId']][0], 
-                            update_parents[parent_id][1] + update_parents[item['parentId']][1]]
-                    elif parent_id and parent_id in imported_items:
-                        update_parents[parent_id] = [update_parents[item['parentId']][0], update_parents[item['parentId']][1]]
-            imported_items[item['id']] = item
-        return update_parents
+            if item['id'] in imported_items:
+                raise ValidationError('Validation Failed')
 
-    async def make_ancestors_rows(self, parents, date, ids):
-        """
-        Генерирует данные готовые для вставки в таблицу items.
-        """
-        insert_ancestors = []
-        update_ancestors = {}
-        updates ={}
-        for key, item in parents.items():
-            query = """ WITH RECURSIVE parents AS (
+            imported_items[item['id']] = item
+        
+        return imported_items
+
+    async def get_ancestors(self, id):
+        query = """ WITH RECURSIVE parents AS (
                             (SELECT item_id, name, date, type, price_sum, price_amount, parent_id
                                 FROM items
                                 WHERE item_id = $1::varchar ORDER BY date DESC LIMIT 1)
@@ -102,42 +80,85 @@ class ImportsView(BaseView):
                                 parents.price_sum, parents.price_amount, parents.parent_id
                         FROM parents
                         ORDER BY parents.item_id, parents.date DESC;
-                    """
+                """
 
-            rows = await self.pg.fetch(query, key)
-            for row in rows:
-                row = dict(row)
-                log.info(str(row.items()))
+        rows = await self.pg.fetch(query, id)
+        return rows
+    
+    @classmethod
+    def calculate_categories_price(self, items):
+        for value in items.values():
+            if value['parent_id'] and value['price_sum'] and value['parent_id'] in items:
+                parent_id = value['parent_id']
 
-                if row['item_id'] not in updates:
-                    updates[row['item_id']] = [item[0], item[1]]
-                    if row['item_id'] in ids:
-                        update_ancestors[row['item_id']] = [row['price_sum'], row['price_amount']]
-                    else:
-                        insert_ancestors.append(row)
+                while parent_id != None and parent_id in items:
+                    if not items[parent_id]['price_sum']:
+                        items[parent_id]['price_sum'] = 0
+
+                    items[parent_id]['price_sum'] += value['price_sum']
+                    items[parent_id]['price_amount'] += 1
+                    
+                    parent_id = items[parent_id]['parent_id']
+
+            if 'ex_parent_id' in value and value['ex_parent_id'] and value['price_sum'] and value['ex_parent_id'] in items:
+                parent_id = value['ex_parent_id']
+
+                while parent_id != None and parent_id in items:
+                    if not items[parent_id]['price_sum']:
+                        items[parent_id]['price_sum'] = 0
+
+                    items[parent_id]['price_sum'] -= value['ex_price_sum']
+                    items[parent_id]['price_amount'] -= 1
+                    
+                    parent_id = items[parent_id]['parent_id']
+        return items
+    
+    async def get_ancestor_updates(self, items, date):
+        ancestors = {}
+        for key, value in items.items():
+            if value['type'] == 'CATEGORY' and 'ex_parent_id' in value:
+                ex_price = value['ex_price_sum'] if value['ex_price_sum'] else 0
+    
+                if not value['price_sum']:
+                    value['price_sum'] = ex_price
                 else:
-                    updates[row['item_id']] = [updates[row['item_id']][0]+item[0], updates[row['item_id']][1]+ item[1]]
-                row['date'] = date
+                    value['price_sum'] += ex_price
+                    value['price_amount'] += value['ex_price_amount']
 
-        for ins in insert_ancestors:
-            if ins['price_sum']:
-                ins['price_sum'] += updates[ins['item_id']][0]
-            else:
-                ins['price_sum'] = updates[ins['item_id']][0]
-            ins['price_amount'] += updates[ins['item_id']][1]
+            keys = {}
+            if value['parent_id'] and value['parent_id'] not in items:
+                if 'ex_parent_id' in value and value['price_sum'] and value['parent_id'] == value['ex_parent_id']:
+                    ex_price = value['ex_price_sum'] if value['ex_price_sum'] else 0
+                    price = value['price_sum'] - ex_price
+                    amount = value['price_amount'] - value['ex_price_amount']
+                else:
+                    price = value['price_sum']
+                    amount = value['price_amount']
+                keys[value['parent_id']] = [price, amount]
 
-        for key in update_ancestors.keys():
-            if update_ancestors[key][0]:
-                update_ancestors[key][0] += updates[key][0]
-            else:
-                update_ancestors[key][0] = updates[key][0]
-            update_ancestors[key][1] += updates[key][1]
+            if 'ex_parent_id' in value and (not value['parent_id'] or value['parent_id'] != value['ex_parent_id']):
+                price = - value['ex_price_sum'] if value['ex_price_sum'] else 0
+                amount = - value['ex_price_amount']
+                keys[value['ex_parent_id']] = [price, amount]
 
-        for key, val in parents.items():
-            if key not in update_ancestors and key in ids:
-                update_ancestors[key] = [val[0], val[1]]
+            for key, value in keys.items():
+                parents = await self.get_ancestors(key)
+                if not parents:
+                    raise ValidationError('Validation Failed')
+                        
+                for parent in parents:
+                    parent = dict(parent)
+                    if parent['item_id'] not in ancestors:
+                        parent['price_sum'] = parent['price_sum'] if parent['price_sum'] else 0
+                        parent['date'] = date
+                        ancestors[parent['item_id']] = parent
 
-        return update_ancestors, insert_ancestors
+                    ancestors[parent['item_id']]['price_sum'] += value[0]
+                    ancestors[parent['item_id']]['price_amount'] += value[1]
+
+            
+        return items, ancestors
+
 
 
     @docs(summary='Добавить выгрузку с информацией о товарах/категориях')
@@ -148,34 +169,21 @@ class ImportsView(BaseView):
 
                 items = self.request['data']['items']
                 date = self.request['data']['updateDate']
-                ids = [item['id'] for item in items]
 
-                # Нахождение обновлений родителей категорий/продуктов
-                parent_updates = await self.calculate_parent_updates(items)
-
-                # Нахождение предков категорий/продуктов
-                update_ancestors, insert_ancestors = await self.make_ancestors_rows(parent_updates, date, ids)
-
-                # Вставка обновленных предков категорий/продуктов
-                chunked_ancestor_rows = chunk_list(insert_ancestors, self.MAX_ITEMS_PER_INSERT)
-                for chunk in chunked_ancestor_rows:
+                items_dict = await self.validate_types(items)
+                items_dict = self.rename_item_fields(items_dict, date)
+                items_dict = self.calculate_categories_price(items_dict)
+                items_dict, ancestors_dict = await self.get_ancestor_updates(items_dict, date)
+    
+                chunked_insert_rows = chunk_list(ancestors_dict.values(), self.MAX_ITEMS_PER_INSERT)
+                for chunk in chunked_insert_rows:
                     query = items_table.insert().values(chunk)
                     await conn.execute(self.get_sql(query))
 
-                # Получение импортированных категорий/продуктов для вставки
-                insert_rows = self.make_items_rows(items, date)
-
-                # Обновление предков категорий/продуктов, которые присутстуют в import
-                for key, val in update_ancestors.items():
-                    id = ids.index(key)
-                    insert_rows[id]['price_sum'] = val[0]
-                    insert_rows[id]['price_amount'] = val[1]
-                
-                # Вставка всех импортированных категорий/продуктов
-                chunked_insert_rows = chunk_list(insert_rows, self.MAX_ITEMS_PER_INSERT)
+                chunked_insert_rows = chunk_list(items_dict.values(), self.MAX_ITEMS_PER_INSERT)
                 for chunk in chunked_insert_rows:
                     query = items_table.insert().values(chunk)
-                    await conn.fetchval(self.get_sql(query))
+                    await conn.execute(self.get_sql(query))
 
                 return Response(status=HTTPStatus.OK)
 

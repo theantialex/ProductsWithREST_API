@@ -8,3 +8,4 @@ setproctitle==1.2.*
 aiohttp_apispec==2.2.*
 marshmallow==3.16.*
 asyncpg==0.25.*
+python-dateutil==2.8.*

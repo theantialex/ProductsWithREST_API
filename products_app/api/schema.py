@@ -1,6 +1,7 @@
 from datetime import datetime
+from email.policy import default
 
-from marshmallow import Schema, ValidationError, validates, validates_schema
+from marshmallow import Schema, ValidationError, missing, validates, validates_schema
 from marshmallow.fields import DateTime, Int, Nested, Str
 from marshmallow.validate import Length, OneOf, Range
 
@@ -9,8 +10,8 @@ from products_app.db.schema import ItemType
 class ItemImportSchema(Schema):
     id = Str(validate=Length(min=1, max=256), required=True)
     name = Str(validate=Length(min=1, max=256), required=True)
-    parentId = Str(allow_none=True, validate=Length(min=1, max=256), required=False)
-    price = Int(allow_none=True, validate=Range(min=0), strict=True, required=False)
+    parentId = Str(allow_none=True, validate=Length(min=1, max=256), missing=None)
+    price = Int(allow_none=True, validate=Range(min=0), strict=True, missing=None)
     type = Str(validate=OneOf([type.value for type in ItemType]), required=True)
 
 class ItemSchema(ItemImportSchema):
@@ -26,7 +27,7 @@ class ImportSchema(Schema):
 
     @validates('updateDate')
     def validate_update_date(self, value: datetime):
-        if value > datetime.now():
+        if value.timestamp() > datetime.now().timestamp():
             raise ValidationError("Update date can't be in future")
 
     @validates_schema
@@ -41,14 +42,14 @@ class ImportSchema(Schema):
                 raise ValidationError(
                     'parent id {} cannot be the same as item id {}'.format(item['parentId'], item['id'])
                 )
-            if not item['price'] and item['type'] != 'CATEGORY':
+            if  not item['price'] and item['type'] != 'CATEGORY':
                 raise ValidationError(
                     'offer price cannot be null'
-            )
+                )
             if item['type'] == 'CATEGORY' and item['price']:
                 raise ValidationError(
                     'category price must be null'
-            )
+                )
             item_ids.add(item['id'])
 
 class StatisticsSchema(Schema):

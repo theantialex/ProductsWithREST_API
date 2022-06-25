@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-
+from dateutil import parser
 from marshmallow import ValidationError
 from sqlalchemy import and_
 from .base import BaseView
@@ -22,7 +22,7 @@ class SalesView(BaseView):
                 {
                     'id': row['item_id'],
                     'name': row['name'],
-                    'date': row['date'],
+                    'date': datetime.isoformat(row['date'], timespec='milliseconds') + 'Z',
                     'parentId': row['parent_id'],
                     'price': row['price_sum'],
                     'type': row['type']
@@ -35,8 +35,8 @@ class SalesView(BaseView):
     async def get(self):
         try:
             date = self.request.rel_url.query.get('date', '')
-            date = datetime.fromisoformat(date)
-            if date > datetime.now():
+            date = parser.isoparse(date)
+            if date.timestamp() > datetime.now().timestamp():
                 raise ValidationError
         except:
             raise ValidationError('Validation Failed')
