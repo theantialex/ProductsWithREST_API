@@ -11,7 +11,7 @@ from configargparse import Namespace
 
 
 CENSORED = '***'
-DEFAULT_PG_URL = 'postgresql://db_user:12345@localhost/products'
+DEFAULT_PG_URL = 'postgresql://db_user:12345@postgres:5432/products'
 MAX_QUERY_ARGS = 32767
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
@@ -22,10 +22,10 @@ log = logging.getLogger(__name__)
 
 async def setup_pg(app: Application, args: Namespace) -> Pool:
     db_info = args.pg_url.with_password(CENSORED)
-    log.info('Connecting to database: %s', db_info)
+    log.info('Connecting to database: %s', DEFAULT_PG_URL)
 
     app['pg'] = await asyncpg.create_pool(
-        dsn=str(args.pg_url),
+        dsn=str(DEFAULT_PG_URL),
         min_size=args.pg_pool_min_size,
         max_size=args.pg_pool_max_size
     )

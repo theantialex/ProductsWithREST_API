@@ -1,0 +1,25 @@
+version: "3.4"
+services:
+  postgres:
+    restart: always
+    image: postgres:12
+    environment:
+      POSTGRES_USER: {{ products_app_pg_user }}
+      POSTGRES_PASSWORD: {{ products_app_pg_password }}
+      POSTGRES_DB: {{ products_app_pg_dbname }}
+    ports:
+      - "5432:5432"
+    volumes:
+      - /var/lib/postgresql/data:/var/lib/postgresql/data
+
+  products_app:
+    restart: always
+    image: {{ products_app_image }}
+    depends_on:
+      - postgres
+    ports:
+      - "80:8081"
+    environment:
+      PRODUCTS_APP_PG_URL: postgresql://{{ products_app_pg_user }}:{{ products_app_pg_password }}@postgres/{{ products_app_pg_dbname }}
+    extra_hosts:
+      - "postgres:172.17.0.1"

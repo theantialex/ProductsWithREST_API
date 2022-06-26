@@ -1,0 +1,6 @@
+---
+
+- name: restart products_app
+  service:
+      name: docker-compose@products_app
+      state: restarted
