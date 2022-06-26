@@ -11,4 +11,4 @@
 ### Деплой
 
     cd deploy
-    ansible-playbook -i hosts.ini --user=root deploy.yml
+    ansible-playbook -i hosts.ini deploy.yml
