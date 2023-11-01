@@ -1,6 +1,6 @@
 # ProductsWithREST_API
 
-### Запуск
+### Start
 
     make devenv
     make postgres
@@ -8,7 +8,7 @@
     products_app-db upgrade head
     products_app-api
 
-### Деплой
+### Deploy
 
     cd deploy
     ansible-playbook -i hosts.ini deploy.yml
